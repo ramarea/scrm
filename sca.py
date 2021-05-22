@@ -41,8 +41,9 @@ DHSH_DR = N(100,sqrt(50)) # demand rate for the high demand risk high supply ris
 DHSH_SR = N(100,sqrt(50)) # supply rate for the high demand risk high supply risk scenario
 
 # GAME PLAN
-# 1. Build Agent Class by 5/20
+# 1. Build Agent Class by 5/20 DELAYED, NOW 5/22
 # 2. Build Order Class by 5/21
+# 2.1 Order class will have time received and quantity of order
 # 3. Build Simulation by 5/23
 
 
@@ -53,15 +54,24 @@ def orderQQty():
     print("Order Q Quantity") #CDA 5/19
     
 def processQueuedOrders():
+    # While there is sufficient inventory:
+    # Fulfill the order at the front of the queue provided the maxdelay has not been exceeded
+    # If the orderquantity of front order exceeds inventory, replace the order at the front of queue and attempt to fulfill the next one.
+    # Discard any expired order you come across
+    # NOTE TO SELF: At what stage of the simulation should I update time? In what order should I propagate through the agents and how do the choices affect the results?
     print("Process Queued Orders") #CDA 5/19
     
-def receiveNewOrders():
+def receiveNewOrders(order_time, order_quantity):
+    # receive order with time and quantity information
+    # Add it to the end of the order queue (Array of order objects for each instance of the agent class)
+    # NOTE TO SELF: (pass order queue or make it globally accessible?)
     print("Receive New Orders") #CDA 5/19
         
 def endTimestep():
     print("End Timestep") #CDA 5/19
 
 # General Schematic of the process
+# Question to self: Do I receive shipment at beginning of time step or at the end of the time step? same question for 
 def startTimestep():
     inventory = 0 # TVA 5/19
     S = 5 # TVA 5/19
@@ -69,7 +79,8 @@ def startTimestep():
     if (inventory < S):
         orderQQty()
     processQueuedOrders()
-    receiveNewOrders()
+    receiveNewOrders(order_time, order_quantity)
+    # check SQPolicy and replenish inventory as necessary
     endTimestep()
 
 def main():

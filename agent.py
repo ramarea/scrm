@@ -13,18 +13,6 @@ import numpy as np
 import pandas as pd
 
 # SIMULATION PARAMETERS FOR THE AGENT AND ORDER CLASSES
-
-# Current Bugs:
-# Issue with using a dictionary to store orders and shipments
-# Possible fix 1: use try catch
-# Possible fix 2: initialize dict with all keys defined and set to 0
-
-# Outstanding functions
-# 1. Implement the functions for calculating the VA and CSL metrics
-# Use data frame to keep track of it for comparison.
-# 2. Implement a function modeled after the dynamics of a shock absorber to incorpoorate the effect of the deltas.
-
-BACK_ORDER_COST = 0.2 # per unit per day
 SALE_LOST_COST_MULT = 0.1 # to be multiplied by sale price per unit
 INVENTORY_COST = 0.1 # per unit per day
 ORDER_COST = 100 # per order
@@ -33,11 +21,13 @@ PRODUCTION_COST = 20 # per unit
 SUPPLIER_SALE_PRICE = 40 # per unit
 DISTRIBUTION_SALE_PRICE = 50 # per unit
 RETAIL_SALE_PRICE = 60 # per unit
-ORDER_LEAD_TIME = 1 # day # CHANGING THIS REQUIRES CHANGING THE CODE ON THIS VERSION
-SHIPMENT_LEAD_TIME = 1 # day # CHANGING THIS REQUIRES CHANGING THE CODE ON THIS VERSION
 INITIAL_INVENTORY = 300 # units
 SQ_POLICY_S = 200 # units
 SQ_POLICY_Q = 300 # units
+# THE FOLLOWING PARAMETERS ARE EITHER NOT USED OR USED IMPLICITLY IN THE CURRENT VERSION OF THIS PROGRAM
+BACK_ORDER_COST = 0.2 # per unit per day
+ORDER_LEAD_TIME = 1 # day # CHANGING THIS REQUIRES CHANGING THE CODE ON THIS VERSION
+SHIPMENT_LEAD_TIME = 1 # day # CHANGING THIS REQUIRES CHANGING THE CODE ON THIS VERSION
 
 class Agent:
     def __init__(self, name):
@@ -50,19 +40,23 @@ class Agent:
         self.discarded_orders = 0
         self.filled_orders = 0
         self.current_time = 0
-        self.value_add = 0
-        self.shipments_out = {}
-        self.orders_out = {}
+        self.shipments_out = {"D1":0, "D2":0,"R1":0,"R2":0,"S1":0,"S2":0}
+        self.orders_out = {"D1":0, "D2":0,"R1":0,"R2":0,"S1":0,"S2":0}
+        self.num_orders_placed = 0
+        self.qty_orders_placed = 0
+        self.cost = 0
+        self.revenue = 0
         self.env_dr = 100 # demand rate into retailer in scenario
         self.env_sr = 100 # supply rate into supplier in scenario
-        self.metrics = pd.DataFrame(columns = ['Time', 'Filled Orders', 'Discarded Orders'])
+        self.metrics = pd.DataFrame(columns = ['Time','Filled Orders', 'Discarded Orders', 'Revenue', 'Costs'])
     
-    # This function receives all the orders from the previous time period. Possible error from the base case at time = 0 when there are no orders from previous time period. Another special case is defined for the retailer whose customers are not considered nodes in our model. We use the demand rates based on the risk scenario for the incoming order in that case.
+    # This function receives all the orders from the previous time period.A special case is defined for the retailer whose customers are not considered nodes in our model. We use the demand rates based on the risk scenario for the incoming order in that case.
     def receiveOrder(self):
         if self.type != "R":
             for customer in self.customers:
-                the_order = order.Order(customer, customer.orders_out.get(self.name))
+                the_order = order.Order(customer.name, customer.orders_out.get(self.name))
                 self.orders_queue.append(the_order)
+                #print(self.orders_queue[0].quantity)
         else:
             the_order = order.Order("customer", self.env_dr)
             self.orders_queue.append(the_order)
@@ -85,27 +79,62 @@ class Agent:
                 self.inventory += supplier.shipments_out.get(self.name)
         else:
             self.inventory += self.env_sr
-   
+
    # This function sends out a processed order to the agent's customer.
     def shipToCustomer(self,customer,quantity):
         self.shipments_out[customer] = quantity
    
    # This function processes an agent's queued orders.
+   # DEBUGGING NOTES: THE ELSE WORKS AS EXPECTED
     def processQueuedOrders(self):
         for order in self.orders_queue:
-            if order.quantity >= self.inventory & order.time_remaining >= 0:
+            if order.quantity <= self.inventory and order.time_remaining >= 0:
                 self.filled_orders += 1
                 self.inventory -= order.quantity
-                print(order.customer)
                 self.shipments_out[order.customer] = order.quantity
-                #shipToCustomer(self, order.customer, order.quantity)
-            elif order.quantity < self.inventory & order.time_remaining >= 0:
+            elif order.quantity < self.inventory and order.time_remaining >= 0:
                 order.unableToFillAtCurrentPeriod()
             else:
                 self.discarded_orders += 1
                 self.orders_queue.remove(order)
-    # This function will keep track of and update the VA and CSL metrics to measure the performance of the supply chain under various network topologies and risk scenarios. 
+        
+    # Think about how to capture the different cost rates
+    def calculateCosts(self):
+        qty_cost = 0
+        qty_price = 0
+        if self.type == "S":
+            qty_cost = PRODUCTION_COST
+            qty_price = SUPPLIER_SALE_PRICE
+        elif self.type == "D":
+            qty_cost = SUPPLIER_SALE_PRICE
+            qty_price = DISTRIBUTION_SALE_PRICE
+        else:
+            qty_cost = DISTRIBUTION_SALE_PRICE
+            qty_price = RETAIL_SALE_PRICE
+        self.cost = OPERATING_COST + INVENTORY_COST * self.inventory + self.num_orders_placed * ORDER_COST + self.qty_orders_placed * qty_cost + self.discarded_orders * qty_price * SALE_LOST_COST_MULT
+    
+    def calculateRevenue(self):
+        qty_price = 0
+        if self.type == "S":
+            qty_price = SUPPLIER_SALE_PRICE
+        elif self.type == "D":
+            qty_price = DISTRIBUTION_SALE_PRICE
+        else:
+            qty_price = RETAIL_SALE_PRICE
+        self.revenue = self.filled_orders * qty_price
+    
+    # This function resets back to zero every single value that is measured on a per period basis for the agent.
+    def resetPeriodValues(self):
+        self.num_orders_placed = 0
+        self.qty_orders_placed = 0
+        self.filled_orders = 0
+        self.discarded_orders = 0
+        self.cost = 0
+        self.revenue = 0
+    
+    # This function will keep track of and update the VA and CSL metrics to measure the performance of the supply chain under various network topologies and risk scenarios.
     def updateMetrics(self):
-        temp = pd.DataFrame({'Time':[self.current_time], 'Filled Orders': [self.filled_orders], 'Discarded Orders': [self.discarded_orders]})
-        self.metrics.append(temp)
-            
+        temp = pd.DataFrame({'Time':[self.current_time], 'Filled Orders': [self.filled_orders], 'Discarded Orders': [self.discarded_orders], 'Revenue': [self.revenue], 'Costs':[self.cost]})
+        og_df = self.metrics
+        og_df = og_df.append(temp,ignore_index=True)
+        self.metrics = og_df

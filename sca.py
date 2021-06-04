@@ -9,14 +9,6 @@ import numpy as np
 import agent
 import pandas as pd
 
-# LEGEND
-# NFU: Note for Future Update
-
-# BUGS AND OUTSTANDING WORK
-# 1. All the bugs are from the Agent Class.
-# 2. Still need to write a few functions to extract the metrics data frames at the end the simulations and compare the performance of the different topologies under the various risk scenarios. Basically confirm the findings of the SC paper we are basing this off.
-# 3. Compare the performance with the effect of the deltas. 
-
 
 # SIMULATION PARAMETERS FOR THE DIFFERENT RISK SCENARIOS
 DLSL_DR = 100 # demand rate for the low demand risk low supply risk scenario
@@ -122,32 +114,42 @@ def runScenarios(agents,environment):
     time = 0
     while time < SIMULATION_DURATION:
         for agent in agents:
+            agent.current_time = time
             agent.receiveOrder()
             agent.receiveNewShipment()
             agent.processQueuedOrders()
             agent.inventoryCheck()
+            agent.calculateCosts()
+            agent.calculateRevenue()
             agent.updateMetrics()
+            agent.resetPeriodValues()
         time += 1
 
-# For a fixed topology of the supply chain, this function runs the simulation across the different risk scenarios.
+def dfs2CSV(agents):
+    for agent in agents:
+        df = agent.metrics
+        scenario = "DHSH" # Update with scenario
+        df.to_csv(f"{agent.name}_{scenario}.csv")
+    
+
+# For a fixed topology of the supply chain, this function runs the simulation across the different risk scenarios. RUN ONE SCENARIO AT A TIME IN THIS VERSION. FUTURE UPDATE TO ALLOW ALL TO RUN SIMULTANEOUSLY. POTENTIAL FIX MIGHT BE SWITCHING THE ORDER OF RUN NETWORK AND RUN SCENARIOS. NOT ENOUGH TIME TO TRY AND FIX IT NOW. #TECHNICALDEBT
 def runNetwork(adj_mat):
     agents = initializeAgents()
     buildNetwork(adj_mat, agents)
-    runScenarios(agents, env_DLSL) # Run the DLSL scenario
-    runScenarios(agents, env_DHSL) # Run the DHSL scenario
-    runScenarios(agents, env_DLSH) # Run the DLSH scenario
+    #runScenarios(agents, env_DLSL) # Run the DLSL scenario
+    #runScenarios(agents, env_DHSL) # Run the DHSL scenario
+    #runScenarios(agents, env_DLSH) # Run the DLSH scenario
     runScenarios(agents, env_DHSH) # Run the DHSH scenario
-    print(agents[0].metrics)
-    print(agents[0].current_time)
-    print(agents[0].filled_orders)
-    print(agents[0].discarded_orders)
+    # STORE DF AS CSV
+    # dfs2CSV(agents) # EXPORT RESULTS TO CSV
+    
+
     
 def main():
     runNetwork(A_1) # Run simulations on ES network
     runNetwork(A_2) # Run simulations on RS network
     runNetwork(A_3) # Run simulations on RH network
     runNetwork(A_4) # Run simulations on AS network
-    print("I AM RUNNING SUCCESSFULLY!!!")
     
 if __name__ == '__main__':
     main()
